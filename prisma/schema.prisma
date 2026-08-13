@@ -1,0 +1,37 @@
+// Local dev: SQLite (zero setup). For production on Vercel or similar
+// serverless hosts, switch provider to "postgresql" and point DATABASE_URL
+// at a hosted Postgres instance (Neon, Supabase, Railway all have free tiers) —
+// see README.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id         Int      @id @default(1)
+  name       String?
+  title      String?
+  background String
+  updatedAt  DateTime @updatedAt
+}
+
+model Job {
+  id                  Int      @id @default(autoincrement())
+  company             String?
+  title               String?
+  orgUrl              String?
+  description         String
+  status              String   @default("tailored") // tailored | applied | interviewing | offer | closed
+  matchScore          Int?
+  tailoredSummary     String?
+  tailoredBullets     String?  // JSON-encoded string[]
+  missingKeywords     String?  // JSON-encoded string[]
+  interviewQuestions  String?  // JSON-encoded string[]
+  talkingPoints       String?  // JSON-encoded string[]
+  rawModelOutput      String?  // fallback if the model didn't return valid JSON
+  createdAt           DateTime @default(now())
+}
