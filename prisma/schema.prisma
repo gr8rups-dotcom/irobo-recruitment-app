@@ -16,14 +16,19 @@ datasource db {
 // this is what makes the app safe to expose to multiple real users instead
 // of everyone sharing a single hardcoded profile.
 model User {
-  id           String    @id @default(cuid())
-  name         String?
-  email        String    @unique
-  passwordHash String?
-  image        String?
-  createdAt    DateTime  @default(now())
-  profile      Profile?
-  jobs         Job[]
+  id                       String    @id @default(cuid())
+  name                     String?
+  email                    String    @unique
+  passwordHash             String?
+  image                    String?
+  // Each user's own Anthropic API key, encrypted at rest (AES-256-GCM, see
+  // src/lib/crypto.ts). IROBO never ships a shared platform key -- every
+  // account brings its own, so hosting this app costs the operator nothing
+  // and no single key is ever a shared point of cost or compromise.
+  anthropicApiKeyEncrypted String?
+  createdAt                DateTime  @default(now())
+  profile                  Profile?
+  jobs                     Job[]
 }
 
 model Profile {

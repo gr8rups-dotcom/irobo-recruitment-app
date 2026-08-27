@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { tailorForJob } from "@/lib/anthropic";
 import { getCurrentUserId } from "@/lib/session";
+import { decrypt } from "@/lib/crypto";
 
 export const runtime = "nodejs";
 
@@ -63,6 +64,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.anthropicApiKeyEncrypted) {
+    return NextResponse.json(
+      { error: "Add your Anthropic API key in Settings before using AI features.", code: "NO_API_KEY" },
+      { status: 400 }
+    );
+  }
+  const apiKey = decrypt(user.anthropicApiKeyEncrypted);
+
   const structuredProfile = {
     name: profile.name || undefined,
     headline: profile.headline || undefined,
@@ -73,7 +83,7 @@ export async function POST(req: NextRequest) {
 
   let result;
   try {
-    result = await tailorForJob(structuredProfile, description);
+    result = await tailorForJob(apiKey, structuredProfile, description);
   } catch (err: any) {
     return NextResponse.json({ error: "Tailoring failed: " + (err?.message || String(err)) }, { status: 502 });
   }

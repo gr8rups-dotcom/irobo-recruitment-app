@@ -4,12 +4,14 @@
 
 These are steps for **you to run yourself** — creating accounts, entering payment details, and connecting a domain all require your own login and consent, so this guide tells you exactly what to click rather than doing it on your behalf.
 
-## Before you start: rotate your secrets
+## Before you start: rotate your secrets, and note the cost model
 
-Your `.env` file's `ANTHROPIC_API_KEY` and `NEXTAUTH_SECRET` were typed into this chat at some point during development. **Do not deploy those same values to production.** Anything that passed through a chat session should be treated as compromised:
+Your `.env` file's `NEXTAUTH_SECRET` was typed into this chat at some point during development. **Do not deploy that same value to production.** Anything that passed through a chat session should be treated as compromised — generate a fresh one for production: run `openssl rand -base64 32` (or use any password generator for a 32+ character random string).
 
-1. Go to [console.anthropic.com](https://console.anthropic.com) → API Keys → revoke the old key → create a new one. Use the new one only in production.
-2. Generate a fresh `NEXTAUTH_SECRET` for production: run `openssl rand -base64 32` (or use any password generator for a 32+ character random string).
+**IROBO is bring-your-own-key (BYOK).** There is no shared `ANTHROPIC_API_KEY` for the whole app anymore — each signed-in user pastes their own Anthropic API key under Settings, and every extraction/tailoring call is billed to that user's own Anthropic account. This means:
+- Hosting this app costs you nothing in AI usage, no matter how many people sign up.
+- You instead need an `ENCRYPTION_KEY` (see step 4) — a server-only secret used to encrypt each user's saved key at rest in the database.
+- If you'd rather run a single-operator instance where you cover everyone's usage, you can still paste your own key into every account's Settings — the app doesn't distinguish "owner" from "user."
 
 ## 1. Push the code to GitHub
 
@@ -65,13 +67,15 @@ npx prisma db push
 | Key | Value |
 |---|---|
 | `DATABASE_URL` | Your Neon/Supabase connection string from step 2 |
-| `ANTHROPIC_API_KEY` | Your **new**, rotated key from the "Before you start" section |
-| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` (or leave unset for the default) |
+| `ENCRYPTION_KEY` | A fresh 32-byte base64 secret — generate with `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Do **not** reuse the one from your local `.env`; production should have its own. This encrypts each user's saved Anthropic key at rest — losing/changing it makes existing saved keys undecryptable, so treat it as permanent once users are signed up. |
+| `ANTHROPIC_MODEL` | `claude-haiku-4-5-20251001` (or leave unset for the default) — this only sets which model everyone's own key calls, it is not itself a credential |
 | `NEXTAUTH_URL` | `https://your-vercel-url.vercel.app` (update this again once your custom domain is live — see step 6) |
 | `NEXTAUTH_SECRET` | Your new, freshly generated secret |
 | `LINKEDIN_CLIENT_ID` | Optional — leave blank if not using LinkedIn sign-in |
 | `LINKEDIN_CLIENT_SECRET` | Optional — leave blank if not using LinkedIn sign-in |
 | `NEXT_PUBLIC_LINKEDIN_ENABLED` | `true` only if you've filled in the two LinkedIn values above, otherwise `false` |
+
+Notice `ANTHROPIC_API_KEY` is gone from this table — IROBO doesn't use a shared key. After deploying, each user (including you) signs up and pastes their own Anthropic key under **Settings** before they can extract a profile or generate a tailored CV.
 
 5. Click **Deploy**.
 
@@ -95,10 +99,12 @@ If something 500s, check **Vercel → your project → Deployments → (latest) 
 
 ## 7. Ongoing costs to watch
 
-This app calls the Anthropic API on every "Extract & review" and every "Match & Generate" click. Once it's public:
-- Monitor usage at [console.anthropic.com](https://console.anthropic.com) → Usage, and consider setting a spend limit there.
+Because IROBO is bring-your-own-key, the Anthropic API calls on "Extract & review" and "Match & Generate" are billed to each individual user's own account, not yours — your only running costs as the operator are hosting (Vercel, likely free tier for low traffic) and the database (Neon/Supabase free tier). This is what makes it safe to open up to "other people" without a surprise bill.
+
+Still worth knowing:
 - Neon/Supabase free tiers have storage and compute limits — fine for a small number of users, worth checking their pricing pages before a large launch.
-- If you want to cap costs further, consider adding an invite-only signup flow or a per-user monthly generation limit before a wide public launch — neither exists yet in the current build (see `ARCHITECTURE.md` §11 for extension ideas).
+- Users without any Anthropic API key simply can't use the AI features yet — the app shows them a banner pointing at Settings, and they get a free key at console.anthropic.com themselves.
+- If you ever want to go back to a single shared-key model (e.g. a small private instance you fund yourself), you can paste your own key into each account's Settings — no code changes needed for that.
 
 ## 8. Future deploys
 

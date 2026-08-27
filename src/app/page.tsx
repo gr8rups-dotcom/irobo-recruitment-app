@@ -88,6 +88,7 @@ export default function LandingPage() {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [result, setResult] = useState<any>(null);
+  const [needsApiKey, setNeedsApiKey] = useState(false);
 
   useEffect(() => {
     if (session?.user?.name && !name) setName(session.user.name);
@@ -179,7 +180,11 @@ export default function LandingPage() {
         body: JSON.stringify({ cvText: background }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Extraction failed.");
+      if (!res.ok) {
+        if (data.code === "NO_API_KEY") setNeedsApiKey(true);
+        throw new Error(data.error || "Extraction failed.");
+      }
+      setNeedsApiKey(false);
       if (data.name && !name) setName(data.name);
       setStatusTag(data.status_tag || "");
       setHeadline(data.headline || "");
@@ -268,7 +273,11 @@ export default function LandingPage() {
         body: JSON.stringify({ company, title: jobTitle, orgUrl, description }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Something went wrong");
+      if (!res.ok) {
+        if (data.code === "NO_API_KEY") setNeedsApiKey(true);
+        throw new Error(data.error || "Something went wrong");
+      }
+      setNeedsApiKey(false);
       setResult(data);
       setStatus("Done — see the tailored CV below, or check the dashboard for the full history.");
     } catch (err: any) {
@@ -280,6 +289,13 @@ export default function LandingPage() {
 
   return (
     <>
+      {needsApiKey && (
+        <div className="card" style={{ borderColor: "#e0b33a", background: "#fffaf0" }}>
+          <strong>Add your Anthropic API key to use AI features.</strong>{" "}
+          <a href="/settings">Go to Settings →</a>
+          <div className="notice">IROBO bills AI usage to each user&apos;s own key — nothing is generated until yours is saved.</div>
+        </div>
+      )}
       <div className="two-pane">
         <div className="card">
           <h2>Your CV {profileLoaded && <span style={{ color: "#1a7d3c", fontWeight: 400, fontSize: 11 }}>· saved profile loaded</span>}</h2>

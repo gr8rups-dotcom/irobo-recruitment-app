@@ -19,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <nav>
               <a href="/">1. Upload & Match</a>
               <a href="/dashboard">2. Dashboard</a>
+              <a href="/settings">Settings</a>
             </nav>
             {children}
           </div>

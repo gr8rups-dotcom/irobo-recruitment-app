@@ -16,7 +16,7 @@ The core design decision that shapes everything else: **separate "capture the tr
 | Language | TypeScript | Shared types between client and server code |
 | Database | Postgres via Prisma ORM | Prisma gives type-safe queries; Postgres is required for serverless hosting (SQLite's file-based storage doesn't survive on Vercel's read-only filesystem) |
 | Auth | NextAuth v4 | Credentials (email + bcrypt password) provider, plus an optional LinkedIn OpenID Connect provider |
-| AI | Anthropic API (`@anthropic-ai/sdk`), Claude Haiku by default | Fast/cheap model is enough for extraction and rewording; swap `ANTHROPIC_MODEL` for a stronger model if needed |
+| AI | Anthropic API (`@anthropic-ai/sdk`), Claude Haiku by default | Fast/cheap model is enough for extraction and rewording; swap `ANTHROPIC_MODEL` for a stronger model if needed. **Bring-your-own-key**: there is no shared platform key — every call is billed to the signed-in user's own Anthropic account (see §6a) |
 | Document parsing | `pdf-parse` (PDF → text), `mammoth` (.docx → text) | Used both for CV upload and job description upload |
 | Document generation | `docx` (npm) for Word, `pdfkit` for PDF | Two independent renderers kept structurally in sync by hand — see §7 |
 
@@ -47,11 +47,12 @@ Nothing about document generation happens in the browser — the client only eve
 
 ```prisma
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String?  // null for LinkedIn-only accounts
-  profile      Profile?
-  jobs         Job[]
+  id                       String   @id @default(cuid())
+  email                    String   @unique
+  passwordHash             String?  // null for LinkedIn-only accounts
+  anthropicApiKeyEncrypted String?  // this user's own key, AES-256-GCM encrypted — see §6a
+  profile                  Profile?
+  jobs                     Job[]
 }
 
 model Profile {          // one per user — the reusable "source of truth"
@@ -105,6 +106,17 @@ This split exists because early versions let the model regenerate the *entire* r
 
 **A real bug worth knowing about:** the model occasionally emits a literal, unescaped `"` inside a JSON string value (e.g., quoting a rhetorical question inside a sentence), which breaks `JSON.parse` even though the response is otherwise well-formed. `parseJson()` now does a second-pass repair — walking the text and treating a quote as an embedded character rather than a string terminator unless it's followed by a JSON delimiter (`, } ] :`) — before giving up. If parsing still fails, the API route returns a clear error instead of silently creating a Job with empty Summary/Skills/Experience fields (which is exactly what used to happen, and is hard to notice from the UI alone).
 
+## 6a. Bring-your-own-key: how AI cost is kept off the operator
+
+Once this app is public, "who pays for the AI calls" becomes a real question — a single shared `ANTHROPIC_API_KEY` scales its cost with every signup, with no built-in ceiling. IROBO avoids this by never having a shared key at all:
+
+- `User.anthropicApiKeyEncrypted` stores each user's own key, encrypted with AES-256-GCM (`src/lib/crypto.ts`) using a server-only `ENCRYPTION_KEY` env var (32 random bytes, base64-encoded, generated once per environment — never the same value in local `.env` and production).
+- `extractProfile()` and `tailorForJob()` (`src/lib/anthropic.ts`) no longer build a module-level Anthropic client from `process.env`. They take the caller's decrypted API key as their first argument and construct a fresh client per call.
+- The API routes that call them (`/api/extract-profile`, `/api/jobs`) load the signed-in user's row, decrypt `anthropicApiKeyEncrypted`, and pass it through. If it's unset, they return `400 { error, code: "NO_API_KEY" }` instead of failing deep inside an AI call — the client UI (`src/app/page.tsx`) checks for that code and shows a banner linking to `/settings`.
+- `/api/settings/api-key` (GET/POST/DELETE) is the only place a key is written or read. GET never returns the decrypted value — only `{ hasKey: boolean }` — so the browser never sees a saved key again after the user pastes it once. POST validates the key with a 1-token real API call before saving, so a typo is caught immediately rather than surfacing as a confusing failure later.
+
+This means the app's operator pays only for hosting (Vercel) and the database (Neon/Supabase) — AI usage scales with adoption but never touches the operator's wallet. If you'd rather run a single-operator instance funded by you, nothing stops you from pasting your own key into every account's Settings; the schema and routes don't distinguish an "owner" account from any other.
+
 ## 7. Document generation — matching a real CV's exact template
 
 Both `docx-generator.ts` and `pdf-generator.ts` render the **same structure**, independently, because the two output libraries have completely different APIs:
@@ -135,13 +147,15 @@ src/lib/
   auth.ts                     NextAuth config (§5)
   session.ts                  getCurrentUserId() helper
   db.ts                       Prisma client singleton
-  anthropic.ts                extractProfile() + tailorForJob() + JSON repair (§6)
+  anthropic.ts                extractProfile() + tailorForJob() + JSON repair (§6) — takes each caller's own API key (§6a)
+  crypto.ts                   encrypt()/decrypt() for each user's saved API key (§6a)
   docx-generator.ts           Word CV renderer (§7)
   pdf-generator.ts            PDF CV renderer (§7)
 src/app/
   login/page.tsx              Sign in / sign up
   page.tsx                    Main flow: upload CV → review → paste JD → generate
   dashboard/page.tsx           History of tailored jobs, status tracking
+  settings/page.tsx           Paste/remove your own Anthropic API key (§6a)
   api/
     auth/[...nextauth]/route.ts   NextAuth handler
     auth/signup/route.ts          Password account creation
@@ -151,6 +165,7 @@ src/app/
     jobs/route.ts                 GET list / POST tailor-and-create
     jobs/[id]/route.ts            PATCH status
     jobs/[id]/download/route.ts   Generate + stream the Word/PDF file
+    settings/api-key/route.ts     GET (hasKey only) / POST (validate+save) / DELETE (§6a)
 src/middleware.ts              Route protection
 src/types/next-auth.d.ts       Session/JWT type augmentation
 ```
@@ -166,7 +181,8 @@ If rebuilding from scratch, this is the order that avoids backtracking:
 5. **Document generation**: get one format working end-to-end (docx is more forgiving to iterate on since Word renders imperfect layouts more gracefully than a hand-rolled PDF), then build the second renderer to the same structure.
 6. **Download routes + dashboard**: wire up file downloads and a history view with status tracking.
 7. **Multi-user hardening**: only after the single-user flow works, add the `userId` foreign keys, scope every query, and add real password hashing. Retrofitting this after the fact (which is what happened in this project) is very mechanical but easy to miss a route — grep for every Prisma query and confirm each one filters by the current user.
-8. **Deploy**: see `DEPLOYMENT.md`.
+8. **Bring-your-own-key (§6a)**: before opening the app to real outside users, remove any shared `ANTHROPIC_API_KEY` and switch to per-user encrypted keys — otherwise every signup adds directly to your own AI bill with no ceiling. This is also mechanical (add the encrypted column, thread the key through the two AI functions, add the settings route/page) but easy to skip if you're used to the single-user version working fine with a shared key.
+9. **Deploy**: see `DEPLOYMENT.md`.
 
 ## 10. Lessons learned the hard way
 
@@ -182,6 +198,6 @@ These are specific, real bugs hit while building this — worth knowing before y
 
 - Multiple CV templates the user can choose between (the current template is deliberately locked to one specific visual structure)
 - Cover letter generation from the same Profile + Job data
-- A "credits" or rate-limit system per user, since every tailoring call costs a real Anthropic API request
+- A key-rotation reminder or "test my saved key" button in Settings, since a revoked/expired key otherwise only surfaces as a failed generation
 - Re-enabling LinkedIn import of the initial CV data, not just sign-in
 - Email verification / password reset flow (the current signup is intentionally minimal)

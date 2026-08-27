@@ -1,8 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const client = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// IROBO is bring-your-own-key: every call is billed to the signed-in user's
+// own Anthropic account, never a shared platform key. Each function below
+// takes that user's decrypted API key as its first argument and builds a
+// fresh client per call -- there is no module-level client anymore.
+function getClient(apiKey: string): Anthropic {
+  return new Anthropic({ apiKey });
+}
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
 
@@ -113,7 +117,7 @@ function parseJson<T>(text: string): T {
  * education, certifications, projects, experience). Used once when a CV is
  * uploaded so the user can review/correct before saving their Profile.
  */
-export async function extractProfile(cvText: string): Promise<ExtractedProfile> {
+export async function extractProfile(apiKey: string, cvText: string): Promise<ExtractedProfile> {
   const prompt = `You are a resume-parsing assistant. Extract structured fields from the candidate's CV text below.
 Copy every field VERBATIM (character-for-character) from the source text — do not rephrase, summarize, standardize, or invent anything. If a field is not present, use an empty string or empty array.
 Return ONLY a single valid JSON object (no markdown fences, no commentary) with exactly these fields:
@@ -136,7 +140,7 @@ If the CV groups skills as a flat list rather than categories, put them all unde
 Candidate CV text:
 ${cvText}`;
 
-  const response = await client.messages.create({
+  const response = await getClient(apiKey).messages.create({
     model: MODEL,
     max_tokens: 4000,
     messages: [{ role: "user", content: prompt }],
@@ -154,6 +158,7 @@ ${cvText}`;
  * Company/title/location/dates are echoed back verbatim, never reworded.
  */
 export async function tailorForJob(
+  apiKey: string,
   profile: { name?: string; headline?: string; skills?: SkillCategory[]; experience?: ExperienceEntry[]; background?: string },
   jobText: string
 ): Promise<TailorResult> {
@@ -206,7 +211,7 @@ ${profile.background ? "\nAdditional background notes:\n" + profile.background :
 Data item 2 (job posting):
 ${jobText}`;
 
-  const response = await client.messages.create({
+  const response = await getClient(apiKey).messages.create({
     model: MODEL,
     max_tokens: 4000,
     messages: [{ role: "user", content: prompt }],
