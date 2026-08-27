@@ -62,7 +62,7 @@ export default function DashboardPage() {
       <div className="card">
         <h2>Dashboard</h2>
         {!jobs.length ? (
-          <div className="empty">No jobs processed yet — save your profile and add a job to get started.</div>
+          <div className="empty">No jobs processed yet — go to "Upload & Match" to get started.</div>
         ) : (
           <table>
             <thead><tr><th>Job title</th><th>Company</th><th>Date</th><th>Match</th><th>Status</th><th></th></tr></thead>

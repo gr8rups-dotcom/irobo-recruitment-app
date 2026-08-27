@@ -1,0 +1,4 @@
+"use client";
+
+import { SessionProvider, useSession, signOut } from "next-auth/react";export function AuthNav() { const { data: session, status } = useSession(); if (status !== "authenticated" || !session) return null; return (<div style={{ fontSize: 12, color: "#666", marginBottom: 16 }}>Signed in as <strong>{session.user?.name || session.user?.email}</strong> · <button onClick={() => signOut({ callbackUrl: "/login" })} style={{ background: "none", border: "none", color: "#2E74B5", cursor: "pointer", textDecoration: "underline", padding: 0, fontSize: 12 }}>Sign out</button></div>); }
+export default function Providers({ children }: { children: React.ReactNode }) { return <SessionProvider>{children}</SessionProvider>; }

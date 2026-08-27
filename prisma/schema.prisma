@@ -1,37 +1,74 @@
-// Local dev: SQLite (zero setup). For production on Vercel or similar
-// serverless hosts, switch provider to "postgresql" and point DATABASE_URL
-// at a hosted Postgres instance (Neon, Supabase, Railway all have free tiers) —
-// see README.
+// Production: hosted Postgres (Neon, Supabase, Railway all have free tiers).
+// Vercel's filesystem is not writable/persistent, so SQLite (the old local-dev
+// setup) cannot be used once deployed there — see DEPLOYMENT.md.
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+// One row per registered account. passwordHash is null for LinkedIn-only
+// users (they never set a local password). Every user gets exactly one
+// Profile (their CV) and any number of Jobs (their tailored applications) --
+// this is what makes the app safe to expose to multiple real users instead
+// of everyone sharing a single hardcoded profile.
+model User {
+  id           String    @id @default(cuid())
+  name         String?
+  email        String    @unique
+  passwordHash String?
+  image        String?
+  createdAt    DateTime  @default(now())
+  profile      Profile?
+  jobs         Job[]
+}
+
 model Profile {
-  id         Int      @id @default(1)
-  name       String?
-  title      String?
-  background String
-  updatedAt  DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String?
+  statusTag          String?  // e.g. "Immediate Joiner"
+  headline           String?  // e.g. "Senior Data & BI Analyst | Business Analytics | Data Quality | Automation"
+  title              String?  // target job title(s) for search/matching
+  location           String?
+  phone              String?
+  email              String?
+  photoDataUrl       String?  // data:image/...;base64,.... — uploaded once, reused on every CV
+  background         String   // raw CV text — source of truth for extraction/tailoring
+  skillsJson         String?  // JSON: [{category, skills: string[]}]
+  educationJson      String?  // JSON: string[] — verbatim lines
+  certificationsJson String?  // JSON: string[] — verbatim lines
+  languagesJson      String?  // JSON: string[] — verbatim lines, e.g. "English - Fluent"
+  projectsJson       String?  // JSON: [{title, link, description}]
+  experienceJson     String?  // JSON: [{title, company, location, dates, bullets: string[]}] — master list
+  updatedAt          DateTime @updatedAt
 }
 
 model Job {
-  id                  Int      @id @default(autoincrement())
-  company             String?
-  title               String?
-  orgUrl              String?
-  description         String
-  status              String   @default("tailored") // tailored | applied | interviewing | offer | closed
-  matchScore          Int?
-  tailoredSummary     String?
-  tailoredBullets     String?  // JSON-encoded string[]
-  missingKeywords     String?  // JSON-encoded string[]
-  interviewQuestions  String?  // JSON-encoded string[]
-  talkingPoints       String?  // JSON-encoded string[]
-  rawModelOutput      String?  // fallback if the model didn't return valid JSON
-  createdAt           DateTime @default(now())
+  id                 Int      @id @default(autoincrement())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company            String?
+  title              String?
+  orgUrl             String?
+  description        String
+  status             String   @default("tailored") // tailored | applied | interviewing | offer | closed
+  matchScore         Int?
+  tailoredHeadline   String?  // e.g. "Senior Data Analyst" — professional title reworded to mirror this JD's seniority/title language
+  tailoredSummary    String?
+  skillsJson         String?  // JSON: [{category, skills: string[]}] — tailored ordering/selection for this job
+  keyAccomplishments String?  // JSON: string[] — selected/reordered for this job
+  experienceJson     String?  // JSON: [{title, company, location, dates, bullets: string[]}] — tailored bullets
+  tailoredBullets    String?  // JSON-encoded string[] — flat list, quick on-page preview
+  missingKeywords    String?  // JSON-encoded string[]
+  interviewQuestions String?  // JSON-encoded string[]
+  talkingPoints      String?  // JSON-encoded string[]
+  rawModelOutput     String?  // fallback if the model didn't return valid JSON
+  createdAt          DateTime @default(now())
+
+  @@index([userId])
 }

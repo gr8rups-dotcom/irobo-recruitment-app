@@ -84,7 +84,7 @@ export default function AddJobPage() {
           <p><strong>Match score:</strong> {result.matchScore != null ? result.matchScore + "%" : "n/a"}</p>
           <p><strong>Summary:</strong> {result.tailoredSummary}</p>
           <p><strong>Bullets:</strong></p>
-          <ul>{(JSON.parse(result.tailoredBullets || "[]")).map((b: string, i: number) => <li key={i}>{b}</li>)}</ul>
+          <ul>{(result.tailoredBullets || []).map((b: string, i: number) => <li key={i}>{b}</li>)}</ul>
           <p>Full detail, status tracking, and interview prep live on the <a href="/dashboard">dashboard</a>.</p>
         </div>
       )}
