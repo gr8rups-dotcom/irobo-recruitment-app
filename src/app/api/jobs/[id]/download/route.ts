@@ -54,7 +54,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   if (format === "pdf") {
     const buffer = await buildResumePdf(profileData, jobData);
-    return new NextResponse(buffer, {
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="Tailored_CV_${safeFileName}.pdf"`,
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 
   const buffer = await buildResumeDocx(profileData, jobData);
-  return new NextResponse(buffer, {
+  return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "Content-Disposition": `attachment; filename="Tailored_CV_${safeFileName}.docx"`,
