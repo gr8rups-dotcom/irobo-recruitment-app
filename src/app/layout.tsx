@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Providers, { AuthNav } from "./providers";
 
 export const metadata: Metadata = {
-  title: "IROBO — Recruitment Ecosystem",
+  title: "Product by gr8rups@gmail.com — Recruitment Ecosystem",
   description: "Upload your CV, paste a job, get an AI-tailored CV and interview prep back.",
 };
 
@@ -13,7 +13,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <Providers>
           <div className="wrap">
-            <h1>IROBO — Recruitment Ecosystem</h1>
+            <h1>
+              Product by gr8rups@gmail.com ·{" "}
+              <a href="https://www.linkedin.com/in/anamitra-halder-b8270415b/" target="_blank" rel="noopener noreferrer">
+                LinkedIn
+              </a>
+            </h1>
             <div className="sub">Upload your CV, paste or upload a job description, get a tailored CV & interview prep back.</div>
             <AuthNav />
             <nav>

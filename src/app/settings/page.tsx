@@ -62,7 +62,7 @@ export default function SettingsPage() {
     <div className="card">
       <h2>Your Anthropic API key</h2>
       <p className="notice" style={{ marginBottom: 12, fontSize: 12 }}>
-        IROBO doesn&apos;t run on a shared platform key — every account brings its own, so profile
+        Product by gr8rups@gmail.com doesn&apos;t run on a shared platform key — every account brings its own, so profile
         extraction and CV tailoring are billed to your own Anthropic account, not the app owner&apos;s.
         Your key is encrypted before it&apos;s stored and is never shown again after saving.
       </p>

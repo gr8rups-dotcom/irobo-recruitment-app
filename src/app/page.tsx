@@ -302,7 +302,7 @@ export default function LandingPage() {
         <div className="card" style={{ borderColor: "#e0b33a", background: "#fffaf0" }}>
           <strong>Add your Anthropic API key to use AI features.</strong>{" "}
           <a href="/settings">Go to Settings →</a>
-          <div className="notice">IROBO bills AI usage to each user&apos;s own key — nothing is generated until yours is saved.</div>
+          <div className="notice">Product by gr8rups@gmail.com bills AI usage to each user&apos;s own key — nothing is generated until yours is saved.</div>
         </div>
       )}
       <div className="two-pane">

@@ -38,7 +38,7 @@ export default function LoginPage() {
 
   return (
     <div style={{ maxWidth: 420, margin: "60px auto", padding: 24 }}>
-      <h1>Welcome to IROBO</h1>
+      <h1>Welcome</h1>
       <p style={{ color: "#666", fontSize: 14 }}>
         {mode === "signin" ? "Sign in to build your tailored CV." : "Create an account to get started."}
       </p>
