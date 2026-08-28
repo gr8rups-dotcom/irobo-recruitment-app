@@ -122,12 +122,17 @@ export default function LandingPage() {
   }, []);
 
   async function parseFile(file: File): Promise<string> {
+    const data = await parseFileFull(file);
+    return data.text;
+  }
+
+  async function parseFileFull(file: File): Promise<{ text: string; photoDataUrl?: string }> {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/parse-document", { method: "POST", body: fd });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Couldn't parse that file.");
-    return data.text as string;
+    return data as { text: string; photoDataUrl?: string };
   }
 
   async function handleCvFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -135,9 +140,13 @@ export default function LandingPage() {
     if (!file) return;
     setCvNotice(`Reading ${file.name}…`);
     try {
-      const text = await parseFile(file);
+      const { text, photoDataUrl: extractedPhoto } = await parseFileFull(file);
       setBackground(text);
-      setCvNotice(`Loaded ${file.name} (${text.length.toLocaleString()} characters). Now click "Extract & review profile details" below.`);
+      // If the CV itself has a photo embedded (most Word/PDF CVs with a
+      // headshot do), pull it in automatically so the user doesn't have to
+      // separately find and re-upload the same photo.
+      if (extractedPhoto) setPhotoDataUrl(extractedPhoto);
+      setCvNotice(`Loaded ${file.name} (${text.length.toLocaleString()} characters)${extractedPhoto ? " — photo detected and copied in" : ""}. Now click "Extract & review profile details" below.`);
     } catch (err: any) {
       setCvNotice("Error: " + (err?.message || String(err)));
       if (cvFileInput.current) cvFileInput.current.value = "";
