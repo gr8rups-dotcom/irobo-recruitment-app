@@ -1,7 +1,7 @@
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle,
-  Footer, AlignmentType,
+  Footer, AlignmentType, TabStopType,
 } from "docx";
 
 // This layout intentionally mirrors the structure of the candidate's original
@@ -71,40 +71,77 @@ export async function buildResumeDocx(profile: ProfileData, job: JobData): Promi
 
   const statusTag = cleanStatusTag(profile.statusTag);
 
-  const nameLineRuns: TextRun[] = [
-    new TextRun({ text: profile.name || "Candidate", bold: true, size: HEAD_SIZE }),
-  ];
-  if (statusTag) {
-    nameLineRuns.push(new TextRun({ text: `   (${statusTag})`, bold: true, underline: {}, size: HEAD_SIZE }));
+  // Page is 12240 twips wide (US Letter) minus the 680-twip margins on each
+  // side used below (34pt * 20 twips/pt) = 10880 twips of usable width when
+  // there's no photo. With a photo, the header is a table whose two cells
+  // are given exact DXA (twip) widths below -- PHOTO_CELL_TWIPS and
+  // TEXT_CELL_TWIPS -- specifically so this tab-stop math is exact instead
+  // of guessed from a percentage-based layout (percentage table columns
+  // don't reliably resolve to a predictable twip width across renderers,
+  // which was verified empirically to overflow the cell and hide the status
+  // tag entirely). Subtract ~216 twips for the text cell's left+right
+  // internal margins (108 twips each, this library's default) so the tab
+  // stop lands on the cell's actual right edge rather than past it.
+  const PAGE_USABLE_TWIPS = 10880;
+  const PHOTO_CELL_TWIPS = 2000;
+  const TEXT_CELL_TWIPS = PAGE_USABLE_TWIPS - PHOTO_CELL_TWIPS;
+  const nameLineTabTwips = (hasPhoto: boolean) =>
+    hasPhoto ? TEXT_CELL_TWIPS - 216 : PAGE_USABLE_TWIPS;
+
+  function buildNameLineRuns(hasPhoto: boolean): TextRun[] {
+    const runs: TextRun[] = [new TextRun({ text: profile.name || "Candidate", bold: true, size: HEAD_SIZE })];
+    if (statusTag) {
+      // Right-aligned via a right tab stop (matches the original CV's layout,
+      // where the status tag sits flush right on the name line rather than a
+      // few spaces after the name) and only the inner words are underlined --
+      // the parentheses stay plain, same as the source document.
+      runs.push(new TextRun({ text: "\t(", bold: true, size: HEAD_SIZE }));
+      runs.push(new TextRun({ text: statusTag, bold: true, underline: {}, size: HEAD_SIZE }));
+      runs.push(new TextRun({ text: ")", bold: true, size: HEAD_SIZE }));
+    }
+    return runs;
   }
 
-  const nameBlock: Paragraph[] = [
-    new Paragraph({ children: nameLineRuns }),
-    ...(headline
-      ? [new Paragraph({ spacing: { before: 60 }, children: [new TextRun({ text: headline.toUpperCase(), bold: true, size: HEAD_SIZE })] })]
-      : []),
-  ];
+  function buildNameBlock(hasPhoto: boolean): Paragraph[] {
+    return [
+      new Paragraph({
+        tabStops: statusTag ? [{ type: TabStopType.RIGHT, position: nameLineTabTwips(hasPhoto) }] : undefined,
+        children: buildNameLineRuns(hasPhoto),
+      }),
+      ...(headline
+        ? [new Paragraph({ spacing: { before: 60 }, children: [new TextRun({ text: headline.toUpperCase(), bold: true, size: HEAD_SIZE })] })]
+        : []),
+    ];
+  }
 
   if (photo) {
     children.push(
       new Table({
-        width: { size: 100, type: WidthType.PERCENTAGE },
+        width: { size: PAGE_USABLE_TWIPS, type: WidthType.DXA },
+        // The per-cell `width` above only sets each cell's own tcW; Word
+        // actually lays the table out using the table's tblGrid, which docx
+        // only populates from this columnWidths array. Without it, the grid
+        // defaults to a trivial width and the tab stop below (measured
+        // against the real 8880-twip cell) lands outside what Word thinks
+        // the cell is, so the status tag silently disappears -- verified by
+        // inspecting the raw document.xml after a render came out blank.
+        columnWidths: [PHOTO_CELL_TWIPS, TEXT_CELL_TWIPS],
         borders: { top: noBorder(), bottom: noBorder(), left: noBorder(), right: noBorder(), insideHorizontal: noBorder(), insideVertical: noBorder() },
         rows: [
           new TableRow({
             children: [
               new TableCell({
-                width: { size: 18, type: WidthType.PERCENTAGE },
+                width: { size: PHOTO_CELL_TWIPS, type: WidthType.DXA },
                 children: [new Paragraph({ children: [new ImageRun({ data: photo.buffer, type: photo.type, transformation: { width: 85, height: 85 } })] })],
               }),
-              new TableCell({ width: { size: 82, type: WidthType.PERCENTAGE }, children: nameBlock }),
+              new TableCell({ width: { size: TEXT_CELL_TWIPS, type: WidthType.DXA }, children: buildNameBlock(true) }),
             ],
           }),
         ],
       })
     );
   } else {
-    children.push(...nameBlock);
+    children.push(...buildNameBlock(false));
   }
 
   const contactBits = [profile.location, profile.phone, profile.email].filter(Boolean);

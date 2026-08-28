@@ -85,11 +85,26 @@ export async function buildResumePdf(profile: ProfileData, job: JobData): Promis
     // chain, so mixing a big name size with a small status-tag size makes it
     // under-advance doc.y and the next line (headline) overlaps the name.
     doc.font("Helvetica-Bold").fontSize(HEAD_SIZE).fillColor("#000000")
-      .text(profile.name || "Candidate", textX, startY, { width: textWidth, continued: !!statusTag });
+      .text(profile.name || "Candidate", textX, startY, { width: textWidth });
     if (statusTag) {
-      doc.font("Helvetica-Bold").fontSize(HEAD_SIZE).text(`   (${statusTag})`, { underline: true });
+      // Matches the original CV's layout: the status tag sits flush to the
+      // right edge of the header block on the same line as the name (not
+      // crammed a few spaces after it), and only the inner words are
+      // underlined -- the parentheses themselves stay plain, same as the
+      // source document. Positioned with explicit x/y (not chained via
+      // `continued` off the name) so it's independent of the name's width.
+      doc.font("Helvetica-Bold").fontSize(HEAD_SIZE);
+      const openParen = "(";
+      const closeParen = ")";
+      const tagTotalWidth =
+        doc.widthOfString(openParen) + doc.widthOfString(statusTag) + doc.widthOfString(closeParen);
+      const tagX = textX + textWidth - tagTotalWidth;
+      doc.text(openParen, tagX, startY, { continued: true });
+      doc.text(statusTag, { continued: true, underline: true });
+      doc.text(closeParen);
     }
     doc.moveDown(0.15);
+    doc.x = textX;
     if (headline) {
       doc.font("Helvetica-Bold").fontSize(HEAD_SIZE).text(headline.toUpperCase(), textX, doc.y, { width: textWidth });
     }
